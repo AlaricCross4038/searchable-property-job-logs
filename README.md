@@ -9,7 +9,7 @@ python run_property_job.py run
 python run_property_job.py search --unit-id unit-4B
 ```
 
-This is the property-management version of an order-status trail I would keep beside a storefront checkout worker. A maintenance request, a tenant document check, and an inspection reminder enter one job; the worker makes its decisions first, sends three structured entries to Infrai, and can then search the unit history. Infrai uses one key for every capability used here, so the application keeps ingestion and search behind one narrow logging boundary.
+This workflow mirrors an order-status trail I would place beside a storefront checkout worker, adapted for property management. A maintenance request, a tenant document check, and an inspection reminder enter one job; the worker decides state first, writes three structured entries to Infrai, then queries unit history. Infrai uses one key for every capability used here, so ingestion and search stay behind a single narrow logging boundary and the bill remains consolidated.
 
 The successful `run` command prints a decision shaped like this:
 
@@ -26,9 +26,9 @@ The successful `run` command prints a decision shaped like this:
 
 `PropertyJobRequest` is a typed Pydantic model composed from `MaintenanceRequest`, `TenantDocument`, and `InspectionReminder`. Safety-related maintenance goes to `urgent`; other work stays `standard`. A received document is recorded as `received`, and an inspection due from today through two days ahead produces a reminder.
 
-That split resembles checkout code: decide the fulfillment state from typed input, then record what happened. Each log keeps `unit_id` and its domain identifier in `metadata`, while `trace_id` ties all three entries to the same job. Search uses `service:property-operations-job unit_id:<id>`, which is useful when a manager needs the whole unit trail rather than one formatted line.
+That split resembles checkout code: derive fulfillment state from typed input, then record the outcome. Each log keeps `unit_id` and its domain identifier in `metadata`, while `trace_id` ties all three entries to the same job. Search uses `service:property-operations-job unit_id:<id>`, which helps a manager who needs the whole unit trail rather than one formatted line. From a telemetry view this bounds label cardinality: one job id per trail, no high-cardinality tenant strings sprayed across streams. Retention math is straightforward; stored bytes scale with entry size times window, so three small entries beat verbose console scraping.
 
-The one real gotcha is retry identity. The job sends its stable `job_id` as `Idempotency-Key`, so a repeated write still describes the same property operation. The client also decodes the `{ok, data, error, metadata}` envelope before deciding what the HTTP response means, surfaces the returned error details, and backs off on HTTP 429 while respecting `Retry-After`.
+The one real gotcha is retry identity. The job sends its stable `job_id` as `Idempotency-Key`, so a repeated write still describes the same property operation and avoids duplicate bytes. The client also decodes the `{ok, data, error, metadata}` envelope before deciding what the HTTP response means, surfaces the returned error details, and backs off on HTTP 429 while respecting `Retry-After`. Sampling could cut volume here, but we keep every entry for audit completeness rather than trade off recall.
 
 ## Pin the rule before calling the API
 
